@@ -1,0 +1,6 @@
+{
+  "refs": [
+    { "path": "product_monster_fridge.jpg", "role": "product" },
+    { "path": "style_retail_sale_poster.jpg", "role": "style" }
+  ]
+}

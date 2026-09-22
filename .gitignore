@@ -1,0 +1,27 @@
+# Secrets / local env
+.env
+key.json
+.venv/
+__pycache__/
+*.pyc
+
+# Ad video track — keep local only; do not ship in social-post deliverable
+ad-video-generation/
+*.mp4
+
+# Combined R&D docs that also cover Veo / video (not social-post-only)
+reports/generate_gcp_vertex_rnd_reference.py
+reports/AddLyft_GCP_Vertex_AI_RnD_Technical_Reference.pdf
+
+# Runtime / build artifacts
+logs/
+node_modules/
+frontend/dist/
+social-post-image/logs/
+social-post-image/outputs/
+social-post-image/__pycache__/
+backend/__pycache__/
+backend/app/__pycache__/
+
+# Editor / local
+.cursor/

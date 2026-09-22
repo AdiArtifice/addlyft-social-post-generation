@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Social Post Image</title>
+  <style>
+    :root {
+      --bg: #f4f4f2;
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --line: #d0d0cb;
+      --card: #fff;
+      --accent: #0f6b4c;
+      --warn: #8a5a00;
+      --warn-bg: #fff6e5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+    h1 { font-size: 1.5rem; margin: 0 0 0.35rem; }
+    .lede { color: var(--muted); margin: 0 0 1rem; }
+    .draft-banner {
+      background: var(--warn-bg);
+      border: 1px solid #e6d2a8;
+      color: var(--warn);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.92rem;
+    }
+    .draft-banner strong { display: block; margin-bottom: 0.25rem; }
+    .draft-banner ul { margin: 0.35rem 0 0; padding-left: 1.2rem; }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 1rem;
+    }
+    label { display: block; font-weight: 600; margin-bottom: 0.4rem; }
+    textarea {
+      width: 100%;
+      min-height: 160px;
+      padding: 0.75rem;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font: inherit;
+      resize: vertical;
+    }
+    input[type="file"] { width: 100%; }
+    .hint { color: var(--muted); font-size: 0.9rem; margin: 0.35rem 0 0; }
+    .char-count { color: var(--muted); font-size: 0.85rem; margin: 0.25rem 0 0; }
+    .toggle-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      font-weight: 500;
+    }
+    .toggle-row input { margin-top: 0.25rem; }
+    button {
+      margin-top: 0.9rem;
+      background: var(--accent);
+      color: #fff;
+      border: 0;
+      border-radius: 6px;
+      padding: 0.65rem 1.2rem;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .error { color: #a11; margin: 0.75rem 0 0; }
+    .result img {
+      display: block;
+      width: 100%;
+      max-width: 420px;
+      margin: 0.75rem auto 0;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: #111;
+    }
+    .draft-tag {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--warn);
+      background: var(--warn-bg);
+      border: 1px solid #e6d2a8;
+      border-radius: 4px;
+      padding: 0.2rem 0.45rem;
+      margin-bottom: 0.5rem;
+    }
+    .checklist {
+      margin: 0.75rem 0 0;
+      padding: 0.75rem 0.9rem;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    .checklist strong { display: block; margin-bottom: 0.35rem; }
+    .checklist ul { margin: 0; padding-left: 1.2rem; color: var(--muted); }
+    .usage {
+      margin-top: 1rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--line);
+    }
+    .usage h2 {
+      font-size: 0.95rem;
+      margin: 0 0 0.75rem;
+      font-weight: 600;
+    }
+    .usage-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 0.65rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .usage-grid .stat {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0.55rem 0.7rem;
+    }
+    .usage-grid .stat .k {
+      display: block;
+      color: var(--muted);
+      font-size: 0.75rem;
+      margin-bottom: 0.2rem;
+    }
+    .usage-grid .stat .v {
+      display: block;
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      word-break: break-word;
+    }
+    .usage-note {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin: 0.75rem 0 0;
+      word-break: break-all;
+    }
+    .previews {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.6rem;
+    }
+    .ref-card {
+      width: 120px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0.4rem;
+    }
+    .ref-card img {
+      width: 100%;
+      height: 72px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--line);
+      display: block;
+    }
+    .ref-card select {
+      width: 100%;
+      margin-top: 0.35rem;
+      font: inherit;
+      font-size: 0.8rem;
+      padding: 0.25rem;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+    }
+    .ref-card .name {
+      display: block;
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Social Post Image</h1>
+    <p class="lede">
+      Prompt + up to 3 reference images → Nano Banana 2 Lite → one final poster
+      (single API call).
+    </p>
+
+    <div class="draft-banner">
+      <strong>AI draft — review before posting</strong>
+      This tool does not publish. Always verify offer, store name, and spelling before you use the image.
+      <ul>
+        <li>Do not paste customer PII into the prompt.</li>
+        <li>Only include prices/dates/offers you actually want on the poster.</li>
+      </ul>
+    </div>
+
+    <form class="panel" id="form">
+      <label for="prompt">Promotion prompt</label>
+      <textarea
+        id="prompt"
+        name="prompt"
+        maxlength="2000"
+        placeholder="Describe the product, offer, required on-image text, and any other instructions…"
+        required
+      ></textarea>
+      <p class="char-count"><span id="charCount">0</span> / 2000</p>
+
+      <label for="refs" style="margin-top: 1rem">Reference images (0–3)</label>
+      <input id="refs" name="refs" type="file" accept="image/*" multiple />
+      <p class="hint">Optional. Set each image role: product, style, brand, background, or auto.</p>
+      <div class="previews" id="previews"></div>
+
+      <label class="toggle-row">
+        <input type="checkbox" id="allowPeople" />
+        <span>
+          Allow people in poster
+          <span class="hint" style="display:block;font-weight:400">
+            Default is off (no faces). Turn on only if you intentionally want people and your refs support it.
+          </span>
+        </span>
+      </label>
+
+      <button type="submit" id="go">Generate</button>
+      <p class="error" id="error" hidden></p>
+    </form>
+
+    <section class="panel result" id="result" hidden>
+      <span class="draft-tag">Draft · not published</span>
+      <label>Final advertisement</label>
+      <img id="out" alt="Generated social post advertisement" />
+      <div class="checklist">
+        <strong>Before you use this poster</strong>
+        <ul>
+          <li>Offer / price matches the brief</li>
+          <li>Store / brand name is correct</li>
+          <li>On-image spelling looks right</li>
+        </ul>
+      </div>
+      <div class="usage" id="usage" hidden>
+        <h2>Generation stats</h2>
+        <div class="usage-grid" id="usageGrid"></div>
+        <p class="usage-note" id="usageNote"></p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const ROLE_OPTIONS = ["auto", "product", "style", "brand", "background"];
+    const promptEl = document.getElementById("prompt");
+    const refsEl = document.getElementById("refs");
+    const previews = document.getElementById("previews");
+    const form = document.getElementById("form");
+    const go = document.getElementById("go");
+    const errorEl = document.getElementById("error");
+    const result = document.getElementById("result");
+    const out = document.getElementById("out");
+    const usageEl = document.getElementById("usage");
+    const usageGrid = document.getElementById("usageGrid");
+    const usageNote = document.getElementById("usageNote");
+    const allowPeople = document.getElementById("allowPeople");
+    const charCount = document.getElementById("charCount");
+
+    function updateCharCount() {
+      charCount.textContent = String(promptEl.value.length);
+    }
+    promptEl.addEventListener("input", updateCharCount);
+
+    function fmtNum(n) {
+      if (n == null || n === "") return "—";
+      const x = Number(n);
+      return Number.isFinite(x) ? x.toLocaleString() : String(n);
+    }
+
+    function fmtUsd(n) {
+      if (n == null || n === "") return "—";
+      const x = Number(n);
+      return Number.isFinite(x) ? `$${x.toFixed(4)}` : String(n);
+    }
+
+    function fmtSec(n) {
+      if (n == null || n === "") return "—";
+      const x = Number(n);
+      return Number.isFinite(x) ? `${x.toFixed(2)}s` : String(n);
+    }
+
+    function showUsage(data) {
+      const u = data.usage || {};
+      const rows = [
+        ["Time taken", fmtSec(u.wall_seconds)],
+        ["Est. cost", fmtUsd(u.estimated_usd)],
+        ["API calls", fmtNum(data.api_calls || 1)],
+        ["Prompt tokens", fmtNum(u.prompt_tokens)],
+        ["Image tokens", fmtNum(u.image_output_tokens)],
+        ["Text out tokens", fmtNum(u.text_output_tokens)],
+        ["Thoughts tokens", fmtNum(u.thoughts_tokens)],
+        ["Total tokens", fmtNum(u.total_tokens)],
+        ["Model", u.model || "—"],
+        ["Aspect", u.aspect_ratio || "—"],
+        ["Size", u.image_size || "—"],
+        ["People", data.person_generation || "—"],
+      ];
+      usageGrid.innerHTML = "";
+      for (const [label, value] of rows) {
+        const item = document.createElement("div");
+        item.className = "stat";
+        const k = document.createElement("span");
+        k.className = "k";
+        k.textContent = label;
+        const v = document.createElement("span");
+        v.className = "v";
+        v.textContent = value;
+        item.appendChild(k);
+        item.appendChild(v);
+        usageGrid.appendChild(item);
+      }
+      usageNote.textContent = data.filename
+        ? `Saved as ${data.filename}`
+        : "";
+      usageEl.hidden = false;
+    }
+
+    function collectRoles() {
+      return Array.from(previews.querySelectorAll("select.role")).map((s) => s.value);
+    }
+
+    fetch("/api/default-prompt")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.prompt) promptEl.value = d.prompt;
+        updateCharCount();
+      })
+      .catch(() => {});
+
+    refsEl.addEventListener("change", () => {
+      previews.innerHTML = "";
+      errorEl.hidden = true;
+      let files = Array.from(refsEl.files || []);
+      if (files.length > 3) {
+        const dt = new DataTransfer();
+        files.slice(0, 3).forEach((f) => dt.items.add(f));
+        refsEl.files = dt.files;
+        files = Array.from(refsEl.files);
+        errorEl.hidden = false;
+        errorEl.textContent = "Only 3 reference images are allowed; extras were dropped.";
+      }
+      for (const f of files) {
+        const card = document.createElement("div");
+        card.className = "ref-card";
+        const img = document.createElement("img");
+        img.alt = f.name;
+        img.src = URL.createObjectURL(f);
+        const sel = document.createElement("select");
+        sel.className = "role";
+        sel.setAttribute("aria-label", `Role for ${f.name}`);
+        for (const role of ROLE_OPTIONS) {
+          const opt = document.createElement("option");
+          opt.value = role;
+          opt.textContent = role;
+          if (role === "auto") opt.selected = true;
+          sel.appendChild(opt);
+        }
+        const name = document.createElement("span");
+        name.className = "name";
+        name.textContent = f.name;
+        card.appendChild(img);
+        card.appendChild(sel);
+        card.appendChild(name);
+        previews.appendChild(card);
+      }
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.hidden = true;
+      usageEl.hidden = true;
+      go.disabled = true;
+      go.textContent = "Generating…";
+      try {
+        const fd = new FormData();
+        fd.append("prompt", promptEl.value.trim());
+        fd.append("roles", JSON.stringify(collectRoles()));
+        fd.append("allow_people", allowPeople.checked ? "true" : "false");
+        const files = Array.from(refsEl.files || []).slice(0, 3);
+        for (const f of files) fd.append("refs", f, f.name);
+
+        const res = await fetch("/api/generate-image", { method: "POST", body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const detail = data.detail;
+          const msg = Array.isArray(detail)
+            ? detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+            : (detail || "Generation failed.");
+          throw new Error(msg);
+        }
+        out.src = `data:${data.mime_type};base64,${data.image_base64}`;
+        result.hidden = false;
+        showUsage(data);
+      } catch (err) {
+        errorEl.hidden = false;
+        errorEl.textContent = err.message || String(err);
+      } finally {
+        go.disabled = false;
+        go.textContent = "Generate";
+      }
+    });
+  </script>
+</body>
+</html>
