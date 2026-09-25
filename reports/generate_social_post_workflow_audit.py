@@ -1,21 +1,21 @@
-"""Generate complete Social Post Workflow audit PDF (Text + Image).
+"""Generate client-friendly Social Post Workflow audit PDF (Text + Image).
 
-Sources: live codebase, logs/usage.jsonl, social-post-image/logs/image_usage.jsonl,
-prior reports under reports/ and social-post-image/reports/.
-
-Does not invent metrics — labels Measured / Configured estimate / Unknown.
+Simpler language + flow diagrams; keeps key tables and Measured / Configured /
+Unknown metrics from logs and code. Does not invent numbers.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from reportlab.lib.colors import HexColor
-from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+from reportlab.graphics.shapes import Drawing, Line, Polygon, Rect, String
+from reportlab.lib.colors import HexColor, white
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
+    Flowable,
     HRFlowable,
     ListFlowable,
     ListItem,
@@ -29,22 +29,250 @@ from reportlab.platypus import (
 OUT_PATH = Path("reports/AddLyft_Social_Post_Workflow_Audit.pdf")
 
 GREEN = HexColor("#0f7a5f")
+GREEN_SOFT = HexColor("#e8f5f0")
 DARK = HexColor("#14201c")
 MUTED = HexColor("#5b6b64")
 LIGHT = HexColor("#fbfefc")
 GRID = HexColor("#d5e0db")
 AMBER = HexColor("#8a5a00")
 AMBER_BG = HexColor("#fff6e5")
+BLUE = HexColor("#1a4f6e")
+BLUE_SOFT = HexColor("#e8f1f6")
+ORANGE = HexColor("#c45c26")
+ORANGE_SOFT = HexColor("#f7ead8")
+
+
+class DrawingFlowable(Flowable):
+    """Wrap a ReportLab Drawing so it can sit in the Platypus story."""
+
+    def __init__(self, drawing: Drawing):
+        super().__init__()
+        self.drawing = drawing
+        self.width = drawing.width
+        self.height = drawing.height
+
+    def wrap(self, availWidth, availHeight):
+        return self.width, self.height
+
+    def draw(self):
+        self.drawing.drawOn(self.canv, 0, 0)
+
+
+def _box(
+    d: Drawing,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    fill,
+    title: str,
+    subtitle: str = "",
+    title_size: float = 8.5,
+):
+    d.add(Rect(x, y, w, h, fillColor=fill, strokeColor=GRID, strokeWidth=0.8, rx=4, ry=4))
+    d.add(
+        String(
+            x + w / 2,
+            y + h / 2 + (3 if subtitle else 0),
+            title,
+            fontName="Helvetica-Bold",
+            fontSize=title_size,
+            fillColor=DARK,
+            textAnchor="middle",
+        )
+    )
+    if subtitle:
+        d.add(
+            String(
+                x + w / 2,
+                y + h / 2 - 9,
+                subtitle,
+                fontName="Helvetica",
+                fontSize=6.5,
+                fillColor=MUTED,
+                textAnchor="middle",
+            )
+        )
+
+
+def _arrow_right(d: Drawing, x0: float, y: float, x1: float):
+    d.add(Line(x0, y, x1 - 5, y, strokeColor=MUTED, strokeWidth=1.2))
+    d.add(
+        Polygon(
+            [x1, y, x1 - 7, y + 3.5, x1 - 7, y - 3.5],
+            fillColor=MUTED,
+            strokeColor=MUTED,
+            strokeWidth=0.5,
+        )
+    )
+
+
+def _arrow_down(d: Drawing, x: float, y0: float, y1: float):
+    d.add(Line(x, y0, x, y1 + 5, strokeColor=MUTED, strokeWidth=1.2))
+    d.add(
+        Polygon(
+            [x, y1, x - 3.5, y1 + 7, x + 3.5, y1 + 7],
+            fillColor=MUTED,
+            strokeColor=MUTED,
+            strokeWidth=0.5,
+        )
+    )
+
+
+def flow_overall() -> DrawingFlowable:
+    """Big-picture: brief → two parallel paths → drafts for review."""
+    W, H = 500, 175
+    d = Drawing(W, H)
+    d.add(
+        String(
+            W / 2,
+            H - 14,
+            "What happens when you click Generate",
+            fontName="Helvetica-Bold",
+            fontSize=9,
+            fillColor=DARK,
+            textAnchor="middle",
+        )
+    )
+
+    # Row 1: input
+    _box(d, 175, 130, 150, 32, GREEN_SOFT, "Your ad brief", "+ optional photos")
+    _arrow_down(d, 250, 130, 108)
+
+    # Split label
+    d.add(
+        String(
+            250,
+            112,
+            "runs together",
+            fontName="Helvetica",
+            fontSize=6.5,
+            fillColor=MUTED,
+            textAnchor="middle",
+        )
+    )
+
+    # Parallel row
+    _box(d, 40, 58, 160, 42, BLUE_SOFT, "Text path", "Caption · Offer · CTA · Tags")
+    _box(d, 300, 58, 160, 42, ORANGE_SOFT, "Image path", "Portrait poster (9:16)")
+
+    d.add(Line(250, 108, 120, 100, strokeColor=MUTED, strokeWidth=1))
+    d.add(Line(250, 108, 380, 100, strokeColor=MUTED, strokeWidth=1))
+
+    # Into review
+    _arrow_down(d, 120, 58, 36)
+    _arrow_down(d, 380, 58, 36)
+    d.add(Line(120, 36, 380, 36, strokeColor=MUTED, strokeWidth=1))
+    _arrow_down(d, 250, 36, 30)
+    _box(d, 155, 2, 190, 26, AMBER_BG, "You review the drafts", "Nothing is auto-posted")
+
+    return DrawingFlowable(d)
+
+
+def flow_text_detail() -> DrawingFlowable:
+    W, H = 500, 78
+    d = Drawing(W, H)
+    boxes = [
+        (8, "Brief + store", GREEN_SOFT),
+        (108, "Safety checks", LIGHT),
+        (208, "Gemini writes copy", BLUE_SOFT),
+        (318, "Shape & claim checks", LIGHT),
+        (418, "Post preview", AMBER_BG),
+    ]
+    bw, bh = 88, 36
+    y = 22
+    for i, (x, title, fill) in enumerate(boxes):
+        _box(d, x, y, bw, bh, fill, title, title_size=7.5)
+        if i < len(boxes) - 1:
+            _arrow_right(d, x + bw, y + bh / 2, boxes[i + 1][0])
+    d.add(
+        String(
+            W / 2,
+            H - 12,
+            "Text path (in order)",
+            fontName="Helvetica-Bold",
+            fontSize=8.5,
+            fillColor=DARK,
+            textAnchor="middle",
+        )
+    )
+    return DrawingFlowable(d)
+
+
+def flow_image_detail() -> DrawingFlowable:
+    W, H = 500, 78
+    d = Drawing(W, H)
+    boxes = [
+        (8, "Brief + refs", GREEN_SOFT),
+        (108, "Build poster prompt", LIGHT),
+        (208, "Nano Banana image", ORANGE_SOFT),
+        (318, "Save + usage", LIGHT),
+        (418, "Poster preview", AMBER_BG),
+    ]
+    bw, bh = 88, 36
+    y = 22
+    for i, (x, title, fill) in enumerate(boxes):
+        _box(d, x, y, bw, bh, fill, title, title_size=7.5)
+        if i < len(boxes) - 1:
+            _arrow_right(d, x + bw, y + bh / 2, boxes[i + 1][0])
+    d.add(
+        String(
+            W / 2,
+            H - 12,
+            "Image path (in order)",
+            fontName="Helvetica-Bold",
+            fontSize=8.5,
+            fillColor=DARK,
+            textAnchor="middle",
+        )
+    )
+    return DrawingFlowable(d)
+
+
+def flow_guardrails() -> DrawingFlowable:
+    W, H = 500, 95
+    d = Drawing(W, H)
+    d.add(
+        String(
+            W / 2,
+            H - 12,
+            "Safety layers around the AI",
+            fontName="Helvetica-Bold",
+            fontSize=8.5,
+            fillColor=DARK,
+            textAnchor="middle",
+        )
+    )
+    _box(d, 20, 40, 110, 34, GREEN_SOFT, "1. Input checks", "length · blocklist")
+    _arrow_right(d, 130, 57, 155)
+    _box(d, 155, 40, 110, 34, BLUE_SOFT, "2. AI + filters", "facts-only · safety")
+    _arrow_right(d, 265, 57, 290)
+    _box(d, 290, 40, 110, 34, ORANGE_SOFT, "3. Output checks", "shape · claims")
+    _arrow_right(d, 400, 57, 425)
+    _box(d, 425, 40, 60, 34, AMBER_BG, "4. You", "approve")
+    d.add(
+        String(
+            W / 2,
+            12,
+            "The app proposes drafts. A person still decides what goes live.",
+            fontName="Helvetica",
+            fontSize=7,
+            fillColor=MUTED,
+            textAnchor="middle",
+        )
+    )
+    return DrawingFlowable(d)
 
 
 def kv_table(rows: list[list[str]], col0: float = 1.9, col1: float = 4.8) -> Table:
-    data = [["Field", "Value"]] + rows
+    data = [["", ""]] + rows  # header replaced visually
+    data[0] = ["Topic", "Detail"]
     t = Table(data, colWidths=[col0 * inch, col1 * inch])
     t.setStyle(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, 0), GREEN),
-                ("TEXTCOLOR", (0, 0), (-1, 0), HexColor("#ffffff")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), white),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 8.5),
                 ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
@@ -53,8 +281,8 @@ def kv_table(rows: list[list[str]], col0: float = 1.9, col1: float = 4.8) -> Tab
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 5),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ]
         )
     )
@@ -67,7 +295,7 @@ def data_table(rows: list[list[str]], col_widths: list[float]) -> Table:
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, 0), DARK),
-                ("TEXTCOLOR", (0, 0), (-1, 0), HexColor("#ffffff")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), white),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 7.5),
                 ("BACKGROUND", (0, 1), (-1, -1), LIGHT),
@@ -83,13 +311,6 @@ def data_table(rows: list[list[str]], col_widths: list[float]) -> Table:
     return t
 
 
-def badge(text: str, styles) -> Paragraph:
-    return Paragraph(
-        f"<font color='#8a5a00'><b>[{text}]</b></font>",
-        styles["Small"],
-    )
-
-
 def build(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
@@ -97,9 +318,9 @@ def build(path: Path) -> None:
         pagesize=letter,
         leftMargin=0.65 * inch,
         rightMargin=0.65 * inch,
-        topMargin=0.6 * inch,
-        bottomMargin=0.6 * inch,
-        title="AddLyft Social Post Workflow Audit — Text + Image",
+        topMargin=0.55 * inch,
+        bottomMargin=0.55 * inch,
+        title="AddLyft Social Post Workflow — Client Overview",
         author="AddLyft R&D",
     )
     styles = getSampleStyleSheet()
@@ -107,10 +328,10 @@ def build(path: Path) -> None:
         ParagraphStyle(
             name="TitleMain",
             parent=styles["Title"],
-            fontSize=13.5,
+            fontSize=14,
             spaceAfter=3,
             textColor=DARK,
-            leading=16,
+            leading=17,
         )
     )
     styles.add(
@@ -129,7 +350,7 @@ def build(path: Path) -> None:
             name="H",
             parent=styles["Heading2"],
             fontSize=11,
-            spaceBefore=11,
+            spaceBefore=10,
             spaceAfter=5,
             textColor=GREEN,
         )
@@ -139,7 +360,7 @@ def build(path: Path) -> None:
             name="H2",
             parent=styles["Heading3"],
             fontSize=9.5,
-            spaceBefore=8,
+            spaceBefore=7,
             spaceAfter=3,
             textColor=DARK,
         )
@@ -148,8 +369,8 @@ def build(path: Path) -> None:
         ParagraphStyle(
             name="Body",
             parent=styles["Normal"],
-            fontSize=8.8,
-            leading=12,
+            fontSize=9,
+            leading=12.5,
             spaceAfter=5,
             alignment=TA_JUSTIFY,
         )
@@ -168,12 +389,12 @@ def build(path: Path) -> None:
         ParagraphStyle(
             name="Note",
             parent=styles["Normal"],
-            fontSize=8,
-            leading=11,
+            fontSize=8.2,
+            leading=11.5,
             textColor=AMBER,
             backColor=AMBER_BG,
-            borderPadding=6,
-            spaceBefore=4,
+            borderPadding=7,
+            spaceBefore=2,
             spaceAfter=8,
         )
     )
@@ -181,25 +402,29 @@ def build(path: Path) -> None:
         ParagraphStyle(
             name="BulletBody",
             parent=styles["Normal"],
-            fontSize=8.5,
+            fontSize=8.6,
             leading=11.5,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="Caption",
+            parent=styles["Normal"],
+            fontSize=7.5,
+            textColor=MUTED,
+            alignment=TA_CENTER,
+            spaceAfter=8,
+            spaceBefore=2,
         )
     )
 
     story: list = []
 
-    # --- Cover ---
+    story.append(Paragraph("AddLyft · Social Post Workflow", styles["TitleMain"]))
     story.append(
         Paragraph(
-            "AddLyft · Social Post Workflow Audit",
-            styles["TitleMain"],
-        )
-    )
-    story.append(
-        Paragraph(
-            "Complete Text + Image pipeline overview for client review<br/>"
-            "Vertex AI · Gemini text + Nano Banana image · Local R&amp;D showcase<br/>"
-            "Report date: 23 Sep 2026 · Scope: social-post only (video / Veo excluded)",
+            "A plain-language overview of how text posts and poster images are created<br/>"
+            "Client overview · 23 Sep 2026 · Social post only (video not included)",
             styles["Sub"],
         )
     )
@@ -207,412 +432,341 @@ def build(path: Path) -> None:
 
     story.append(
         Paragraph(
-            "<b>How to read this report.</b> Every cost and timing number is tagged: "
-            "<b>Measured</b> = taken from this project’s usage logs; "
-            "<b>Configured estimate</b> = calculated with the rates coded in the app "
-            "(not a GCP invoice); "
-            "<b>Unknown</b> = not recorded or not determined from the current implementation. "
-            "Nothing here invents production SLAs or billing totals.",
+            "<b>How to read numbers in this document</b><br/>"
+            "<b>Measured</b> = taken from our project usage logs · "
+            "<b>Configured estimate</b> = calculated with the price rates coded in the app "
+            "(helpful for planning; not a Google Cloud invoice) · "
+            "<b>Unknown</b> = not recorded yet in this demo.",
             styles["Note"],
         )
     )
 
-    # --- 1 Executive summary ---
-    story.append(Paragraph("1. Executive summary", styles["H"]))
+    # 1. In one minute
+    story.append(Paragraph("1. In one minute", styles["H"]))
     story.append(
         Paragraph(
-            "The Social Post Workflow turns a short advertising brief into two "
-            "reviewable drafts in one screen: (1) structured social copy "
-            "(caption, offer, CTA, hashtags) and (2) an optional portrait poster image, "
-            "optionally guided by up to three reference photos. "
-            "A fixed demo store identity (<b>AMPM Woodstock</b>) is applied automatically "
-            "so the brief does not need to repeat the store name. "
-            "Outputs are labeled AI drafts — the system does not publish to social networks.",
+            "Someone on your team types a short promotion idea (the “brief”). "
+            "The store is already set for this demo as <b>AMPM Woodstock</b>, "
+            "so they do not need to repeat the store name every time. "
+            "They can optionally upload up to three product or style photos.",
             styles["Body"],
         )
     )
     story.append(
         Paragraph(
-            "On a successful “Generate post + poster” click, the UI calls two backend "
-            "APIs <b>in parallel</b>: one Vertex text call and one Vertex image call "
-            "(happy path = <b>2 model calls</b>). Regenerate updates text only "
-            "(1 model call). Image generation dominates both time and cost.",
+            "One click creates <b>two drafts to review</b>: social-media wording "
+            "(caption, offer, call-to-action, hashtags) and a vertical poster image. "
+            "Nothing is posted automatically — a person still decides what goes live.",
             styles["Body"],
         )
     )
+    story.append(kv_table([
+        ["Primary screen", "Local showcase at http://127.0.0.1:5173/"],
+        ["Text AI", "Gemini 2.5 Flash-Lite (Google Vertex AI)"],
+        ["Image AI", "Nano Banana lite image model (9:16 portrait, 1K)"],
+        [
+            "Typical full generate cost",
+            "About $0.0345 (Configured estimate from Measured logs: "
+            "~$0.0001 text + ~$0.0344 image)",
+        ],
+        [
+            "Typical poster wait time",
+            "About 8–11.5 seconds (Measured from recent runs)",
+        ],
+        [
+            "Text wait time",
+            "Unknown in logs (not recorded for text yet)",
+        ],
+    ]))
+
+    # 2. Big picture flow
+    story.append(Paragraph("2. The big picture", styles["H"]))
     story.append(
-        kv_table(
-            [
-                ["Primary UI", "http://127.0.0.1:5173/ (React)"],
-                ["Unified API", "http://127.0.0.1:8000 (FastAPI)"],
-                ["Text model", "gemini-2.5-flash-lite (Vertex)"],
-                ["Image model", "gemini-3.1-flash-lite-image (Vertex, 9:16, 1K)"],
-                [
-                    "Typical combined cost (Configured estimate from Measured logs)",
-                    "≈ $0.0345 per full generate (≈ $0.0001 text + ≈ $0.0344 image)",
-                ],
-                [
-                    "Typical image latency (Measured)",
-                    "≈ 8–11.5 seconds wall time (recent log samples)",
-                ],
-                [
-                    "Text latency (Measured)",
-                    "Unknown — text usage log does not record wall_seconds",
-                ],
-            ]
+        Paragraph(
+            "Text writing and image creation run <b>at the same time</b> (in parallel). "
+            "If one fails, the other can still succeed — you keep whatever worked.",
+            styles["Body"],
+        )
+    )
+    story.append(flow_overall())
+    story.append(
+        Paragraph(
+            "Figure A — One brief feeds two drafts; you review before anything is published.",
+            styles["Caption"],
+        )
+    )
+    story.append(
+        Paragraph(
+            "<b>How many AI calls?</b> A normal Generate uses <b>2</b> model calls "
+            "(one text, one image). “Regenerate” updates wording only (1 text call). "
+            "The image path does not auto-edit; a correction would be a separate step.",
+            styles["Body"],
         )
     )
 
-    # --- 2 Architecture ---
-    story.append(Paragraph("2. Architecture and generation flow", styles["H"]))
+    # 3. Text flow
+    story.append(Paragraph("3. Text workflow (social copy)", styles["H"]))
     story.append(
         Paragraph(
-            "User enters a brief (and optionally 0–3 reference images) in the React UI. "
-            "Vite proxies <font face='Courier'>/api</font> to the FastAPI backend on port 8000. "
-            "The backend owns both text generation and image generation "
-            "(image logic reused from <font face='Courier'>social-post-image/</font>). "
-            "A standalone image HTML page on port 8787 remains optional for debugging only.",
+            "The text path turns your brief into structured post fields that look like "
+            "a finished social post in the preview — not raw JSON for the client to decode.",
             styles["Body"],
         )
     )
-    story.append(Paragraph("2.1 End-to-end steps (Generate)", styles["H2"]))
-    bullets = [
-        "Validate brief length / blocklist; apply selected store context (AMPM Woodstock).",
-        "Start text + image requests together (parallel).",
-        "Text: Gemini Flash-Lite returns JSON matching caption / offer / CTA / hashtags; "
-        "output shape and claim checks run before response.",
-        "Image: build role-aware poster prompt; resize refs; one Nano Banana image call; "
-        "save poster + meta under social-post-image/outputs/.",
-        "UI shows whichever side succeeded; errors are shown separately (partial failure OK).",
-        "Compact usage strip: tokens / estimated cost (and time for image).",
-    ]
+    story.append(flow_text_detail())
+    story.append(Paragraph("Figure B — Text path, step by step.", styles["Caption"]))
     story.append(
-        ListFlowable(
-            [ListItem(Paragraph(b, styles["BulletBody"]), leftIndent=8) for b in bullets],
-            bulletType="1",
-            start="1",
+        Paragraph(
+            "<b>What you get:</b> caption, offer/key message, CTA button text, and "
+            "3–6 hashtags. The selected store is added behind the scenes so the copy "
+            "can mention AMPM Woodstock without you typing it in the brief.",
+            styles["Body"],
+        )
+    )
+
+    # 4. Image flow
+    story.append(Paragraph("4. Image workflow (poster)", styles["H"]))
+    story.append(
+        Paragraph(
+            "The image path builds a detailed creative brief for the image model, "
+            "optionally using your photos as product or style guides, then returns "
+            "one portrait poster.",
+            styles["Body"],
+        )
+    )
+    story.append(flow_image_detail())
+    story.append(Paragraph("Figure C — Image path, step by step.", styles["Caption"]))
+    story.append(kv_table([
+        ["Format", "Portrait 9:16 · 1K (lite model limit)"],
+        ["Photos", "0–3 optional · roles: product / style / brand / background / auto"],
+        ["Photo prep", "Resized to max side 1600px JPEG before send"],
+        [
+            "People in the poster",
+            "Off by default · turn on only if you want faces (Measured policy in product)",
+        ],
+        ["API calls per generate", "Exactly 1 image model call (happy path)"],
+    ]))
+
+    # 5. Cost & metrics
+    story.append(Paragraph("5. Cost, tokens, and timing", styles["H"]))
+    story.append(
+        Paragraph(
+            "Google bills AI usage mainly by how much text/image “work” each run uses "
+            "(tokens). Longer briefs and reference photos usually mean more tokens. "
+            "Our app shows estimated cost after each run using rates we configured "
+            "for planning — useful for R&amp;D budgeting, not a substitute for the "
+            "official cloud bill.",
+            styles["Body"],
+        )
+    )
+    story.append(Paragraph("5.1 Price rates used in the estimator", styles["H2"]))
+    story.append(
+        data_table(
+            [
+                ["Part", "What it covers", "USD / 1M tokens", "Kind"],
+                ["Text input", "Brief + instructions", "$0.10", "Configured estimate"],
+                ["Text output", "Generated post fields", "$0.40", "Configured estimate"],
+                ["Image input", "Prompt + photo tokens", "$0.25", "Configured estimate"],
+                ["Image pixels", "Generated poster", "$30.00", "Configured estimate"],
+            ],
+            [1.2, 2.0, 1.5, 1.8],
         )
     )
     story.append(Spacer(1, 4))
     story.append(
         Paragraph(
-            "<b>API call count (happy path).</b> Generate = 2 Vertex calls. "
-            "Regenerate (text variation) = 1 Vertex text call. "
-            "Text may retry once on non-safety failures (up to 2 text calls if transient error). "
-            "Normal image generate is exactly one model call — no automatic edit pass.",
-            styles["Body"],
-        )
-    )
-
-    # --- 3 Models ---
-    story.append(Paragraph("3. Models and their roles", styles["H"]))
-    story.append(
-        data_table(
-            [
-                ["Pipeline", "Model ID", "Role", "Source"],
-                [
-                    "Text",
-                    "gemini-2.5-flash-lite",
-                    "Structured social copy (JSON)",
-                    "Configured default (GEMINI_MODEL)",
-                ],
-                [
-                    "Image",
-                    "gemini-3.1-flash-lite-image",
-                    "9:16 poster (1K)",
-                    "Configured default (IMAGE_MODEL)",
-                ],
-            ],
-            [1.0, 2.3, 2.0, 1.6],
-        )
-    )
-    story.append(Spacer(1, 4))
-    story.append(
-        Paragraph(
-            "Text uses temperature 0.7 on first generate and 1.05 on regenerate "
-            "(configured in code). Image aspect 9:16 and size 1K are configured defaults; "
-            "the lite image model does not support 2K in this setup.",
-            styles["Body"],
-        )
-    )
-
-    # --- 4 APIs ---
-    story.append(Paragraph("4. APIs and interfaces", styles["H"]))
-    story.append(
-        kv_table(
-            [
-                ["GET /api/health", "Service health + text model + store brand"],
-                [
-                    "POST /api/generate",
-                    "JSON brief → caption, offer, CTA, hashtags + usage",
-                ],
-                [
-                    "POST /api/generate-image",
-                    "Multipart prompt + refs → base64 poster + usage",
-                ],
-                [
-                    "Optional SPI UI",
-                    "Port 8787 — image-only HTML (not required for showcase)",
-                ],
-            ]
-        )
-    )
-
-    # --- 5 Cost / tokens / latency ---
-    story.append(Paragraph("5. Tokens, latency, and cost", styles["H"]))
-    story.append(
-        Paragraph(
-            "Costs below are <b>Configured estimates</b> using rates stored in the project "
-            "(and matching root <font face='Courier'>.env</font>). "
-            "They are not Google Cloud invoice lines. Token counts and image wall times "
-            "are <b>Measured</b> from local JSONL logs.",
-            styles["Body"],
-        )
-    )
-
-    story.append(Paragraph("5.1 Unit rates used by the estimator", styles["H2"]))
-    story.append(
-        data_table(
-            [
-                ["Pipeline", "Token / unit type", "USD per 1M tokens", "Kind"],
-                ["Text", "Input", "$0.10", "Configured estimate"],
-                ["Text", "Output (+ thoughts)", "$0.40", "Configured estimate"],
-                ["Image", "Input", "$0.25", "Configured estimate"],
-                ["Image", "Text output", "$1.50", "Configured estimate"],
-                ["Image", "Image output", "$30.00", "Configured estimate"],
-            ],
-            [1.0, 2.0, 1.6, 2.0],
-        )
-    )
-    story.append(Spacer(1, 3))
-    story.append(
-        Paragraph(
-            "Image size fallback table (when modality metadata is thin): "
-            "1K ≈ 1120 image output tokens (configured in image_usage.py).",
+            "For a 1K poster, the estimator often counts about <b>1120</b> image-output "
+            "tokens when the provider does not return a finer split "
+            "(Configured table in code).",
             styles["Small"],
         )
     )
 
-    story.append(Paragraph("5.2 Measured text samples (logs/usage.jsonl)", styles["H2"]))
+    story.append(Paragraph("5.2 Recent text runs (from logs)", styles["H2"]))
     story.append(
         data_table(
             [
-                ["When (UTC)", "Source", "Tokens (in/out/total)", "Est. USD", "Wall time"],
-                [
-                    "2026-09-22 19:41",
-                    "api_generate",
-                    "367 / 156 / 523",
-                    "$0.000099",
-                    "Unknown",
-                ],
-                [
-                    "2026-09-22 19:33",
-                    "api_generate",
-                    "367 / 133 / 500",
-                    "$0.000090",
-                    "Unknown",
-                ],
-                [
-                    "2026-09-13 13:54",
-                    "test_vertex_call",
-                    "47 / 82 / 129",
-                    "$0.000038",
-                    "Unknown",
-                ],
+                ["When (UTC)", "Tokens in / out / total", "Est. USD", "Wait time"],
+                ["2026-09-22 19:41", "367 / 156 / 523", "$0.000099", "Unknown"],
+                ["2026-09-22 19:33", "367 / 133 / 500", "$0.000090", "Unknown"],
+                ["2026-09-13 13:54", "47 / 82 / 129", "$0.000038", "Unknown"],
             ],
-            [1.4, 1.4, 1.7, 1.0, 1.0],
+            [1.5, 2.2, 1.3, 1.3],
         )
     )
     story.append(
         Paragraph(
-            "Model on these rows: gemini-2.5-flash-lite. Text wall_seconds is not logged "
-            "→ latency Unknown for text.",
+            "Measured token counts · Configured estimate dollars · model: gemini-2.5-flash-lite. "
+            "Text wait time is Unknown (not stored in the text log).",
             styles["Small"],
         )
     )
 
-    story.append(
-        Paragraph(
-            "5.3 Measured image samples (social-post-image/logs/image_usage.jsonl)",
-            styles["H2"],
-        )
-    )
+    story.append(Paragraph("5.3 Recent poster runs (from logs)", styles["H2"]))
     story.append(
         data_table(
             [
-                ["When (UTC)", "Source", "Total tokens", "Est. USD", "Wall (s)"],
-                [
-                    "2026-09-22 19:41",
-                    "unified_ui_generate",
-                    "4417",
-                    "$0.03442",
-                    "11.43",
-                ],
-                ["2026-09-21 18:40", "ui_generate", "4360", "$0.03441", "11.36"],
-                ["2026-09-21 18:37", "ui_generate", "4360", "$0.03441", "11.07"],
-                ["2026-09-21 18:31", "ui_generate", "1716", "$0.03375", "8.04"],
+                ["When (UTC)", "Total tokens", "Est. USD", "Wait (seconds)"],
+                ["2026-09-22 19:41", "4417", "$0.03442", "11.43"],
+                ["2026-09-21 18:40", "4360", "$0.03441", "11.36"],
+                ["2026-09-21 18:37", "4360", "$0.03441", "11.07"],
+                ["2026-09-21 18:31", "1716", "$0.03375", "8.04"],
             ],
-            [1.4, 1.6, 1.2, 1.1, 1.0],
+            [1.5, 1.5, 1.5, 1.8],
         )
     )
     story.append(
         Paragraph(
-            "Model on these rows: gemini-3.1-flash-lite-image · aspect 9:16 · size 1K. "
-            "Older log lines may show historical Pro / 2K / 16:9 runs — those are "
-            "not current defaults.",
+            "Measured · model: gemini-3.1-flash-lite-image · 9:16 · 1K. "
+            "Poster cost dominates a full Generate (over 99% of the combined estimate).",
             styles["Small"],
         )
     )
 
-    story.append(Paragraph("5.4 What a full Generate typically costs", styles["H2"]))
+    story.append(Paragraph("5.4 Takeaway for budgeting", styles["H2"]))
     story.append(
         Paragraph(
-            "Adding a recent Measured text estimate (~$0.0001) to a recent Measured "
-            "image estimate (~$0.0344) gives roughly <b>$0.0345 per full generate</b> "
-            "(Configured estimate from Measured token logs). "
-            "Image is &gt;99% of that cost. Actual cloud bill may differ with "
-            "promotions, discounts, or rate changes.",
+            "Plan on roughly <b>three to four cents per full text+poster generate</b> "
+            "at current lite settings (Configured estimate from Measured logs). "
+            "Wording-only regenerates are far cheaper (fractions of a cent). "
+            "Cloud discounts or rate changes can move the real invoice.",
             styles["Body"],
         )
     )
 
-    # --- 6 I/O ---
-    story.append(Paragraph("6. Input / output and processing", styles["H"]))
-    story.append(Paragraph("6.1 Text pipeline", styles["H2"]))
+    # 6. Guardrails
+    story.append(Paragraph("6. Guardrails — what the system protects", styles["H"]))
     story.append(
         Paragraph(
-            "<b>In:</b> freeform brief (max 2000 characters) + store_brand "
-            "(fixed AMPM Woodstock in the demo UI). "
-            "<b>Out:</b> caption, offer, CTA, 3–6 hashtags, usage. "
-            "Processing: system “facts only” instructions, JSON schema enforcement, "
-            "Vertex safety filters, then local checks (lengths, hashtag format, "
-            "light claim grounding for $ / % style numbers).",
+            "We do not rely on the AI “being careful” alone. Checks happen before and "
+            "after generation, and the UI makes it clear these are drafts.",
             styles["Body"],
         )
     )
-    story.append(Paragraph("6.2 Image pipeline", styles["H2"]))
-    story.append(
-        Paragraph(
-            "<b>In:</b> same brief + optional 0–3 reference images + per-image role "
-            "(product / style / brand / background / auto) + allow-people flag + store. "
-            "<b>Out:</b> poster image (base64), filename, usage (including wall time), "
-            "person_generation mode used. "
-            "Processing: build role-aware prompt, resize refs to max side 1600 JPEG, "
-            "one image generate call, write outputs + meta JSON.",
-            styles["Body"],
-        )
-    )
-
-    # --- 7 References ---
-    story.append(Paragraph("7. Reference-image handling", styles["H"]))
-    story.append(
-        kv_table(
-            [
-                ["Maximum references", "3 (enforced in UI and API)"],
-                ["Optional?", "Yes — zero refs still allowed"],
-                [
-                    "Roles",
-                    "product, brand, background, style, auto (default)",
-                ],
-                [
-                    "Prep",
-                    "Convert/resize to RGB JPEG, max side 1600px, quality 90",
-                ],
-                [
-                    "Allowed types",
-                    "jpg, jpeg, png, webp, heic, heif",
-                ],
-                [
-                    "People / faces",
-                    "Default ALLOW_NONE; user must opt in to ALLOW_ADULT "
-                    "(no silent auto-upgrade)",
-                ],
-            ]
-        )
-    )
-
-    # --- 8 Guardrails ---
-    story.append(Paragraph("8. Guardrails and validation", styles["H"]))
-    story.append(
-        Paragraph(
-            "Guardrails sit before and after the models — not only as polite prompt wording.",
-            styles["Body"],
-        )
-    )
-    g_bullets = [
-        "<b>Input:</b> empty rejection, 2000-char cap, light abuse blocklist "
-        "(e.g. fake reviews, weapons for sale), file type / ref count checks.",
-        "<b>Vertex safety filters:</b> harassment, hate, sexually explicit, dangerous "
-        "at BLOCK_MEDIUM_AND_ABOVE (configured).",
-        "<b>Facts-only prompts:</b> do not invent prices, discounts, dates, or store "
-        "details; selected store is injected as known context.",
-        "<b>Text output checks:</b> required fields, length caps, 3–6 #hashtags, "
-        "claim tokens ($ / % / “off”) must appear in the brief.",
-        "<b>Image people policy:</b> no faces by default; explicit opt-in required.",
-        "<b>Human review:</b> UI labels drafts “not published” with a short verify checklist.",
-    ]
+    story.append(flow_guardrails())
+    story.append(Paragraph("Figure D — Four layers from input to human approval.", styles["Caption"]))
     story.append(
         ListFlowable(
             [
-                ListItem(Paragraph(b, styles["BulletBody"]), leftIndent=6)
-                for b in g_bullets
+                ListItem(
+                    Paragraph(
+                        "<b>Input:</b> empty briefs rejected; 2000-character limit; "
+                        "simple blocklist for clearly abusive asks; max 3 photos.",
+                        styles["BulletBody"],
+                    ),
+                    leftIndent=4,
+                ),
+                ListItem(
+                    Paragraph(
+                        "<b>During AI:</b> Google safety filters for hate, harassment, "
+                        "sexual, and dangerous content; “facts only” instructions "
+                        "(no invented discounts or dates); store injected from selection.",
+                        styles["BulletBody"],
+                    ),
+                    leftIndent=4,
+                ),
+                ListItem(
+                    Paragraph(
+                        "<b>After AI (text):</b> required fields, length limits, "
+                        "hashtag formatting, light check that $ / % style claims "
+                        "appeared in the brief.",
+                        styles["BulletBody"],
+                    ),
+                    leftIndent=4,
+                ),
+                ListItem(
+                    Paragraph(
+                        "<b>You:</b> on-screen “draft — review before posting” checklist. "
+                        "Legal proof for strong claims (e.g. “#1”) remains a business decision.",
+                        styles["BulletBody"],
+                    ),
+                    leftIndent=4,
+                ),
             ],
             bulletType="bullet",
         )
     )
 
-    # --- 9 Limitations ---
-    story.append(Paragraph("9. Limitations, assumptions, and considerations", styles["H"]))
-    lim = [
-        "Local R&amp;D / client showcase — not a production publishing platform "
-        "(no auth, tenant quotas, or Meta/TikTok post APIs).",
-        "Store is a fixed demo default, standing in for a future “select store” step.",
-        "Cost figures are estimator rates × logged tokens — not GCP Console invoices.",
-        "No automatic OCR check that poster text matches the brief exactly.",
-        "Text latency not recorded in usage.jsonl (Unknown).",
-        "Image output token counts may use a size table / modality heuristic when "
-        "provider metadata is incomplete.",
-        "Claim grounding is lightweight regex — not full legal claim substantiation "
-        "(advertiser still responsible under truth-in-advertising rules).",
-        "Prior image MVP audit PDF and social-post token report remain useful "
-        "background; this document reflects the unified Text+Image workflow as of "
-        "23 Sep 2026.",
-    ]
+    # 7. Limits
+    story.append(Paragraph("7. What this demo does not do (yet)", styles["H"]))
     story.append(
         ListFlowable(
             [
-                ListItem(Paragraph(b, styles["BulletBody"]), leftIndent=6)
-                for b in lim
+                ListItem(
+                    Paragraph(
+                        "It does not post to Instagram, Facebook, TikTok, or other networks.",
+                        styles["BulletBody"],
+                    ),
+                    leftIndent=4,
+                ),
+                ListItem(
+                    Paragraph(
+                        "It is not a full multi-store app — store is fixed for the demo "
+                        "(placeholder for a future “pick your store” step).",
+                        styles["BulletBody"],
+                    ),
+                    leftIndent=4,
+                ),
+                ListItem(
+                    Paragraph(
+                        "It does not automatically proofread every letter on the poster "
+                        "(no OCR quality gate yet).",
+                        styles["BulletBody"],
+                    ),
+                    leftIndent=4,
+                ),
+                ListItem(
+                    Paragraph(
+                        "Estimated dollars are not the final Google Cloud invoice.",
+                        styles["BulletBody"],
+                    ),
+                    leftIndent=4,
+                ),
+                ListItem(
+                    Paragraph(
+                        "Ad video / Veo is out of scope for this social-post package.",
+                        styles["BulletBody"],
+                    ),
+                    leftIndent=4,
+                ),
             ],
             bulletType="bullet",
         )
     )
 
-    # --- 10 References ---
-    story.append(Paragraph("10. Source materials used for this audit", styles["H"]))
+    # 8. Technical appendix (kept short but accurate)
+    story.append(Paragraph("8. Technical snapshot (for your team)", styles["H"]))
     story.append(
         Paragraph(
-            "Code: <font face='Courier'>backend/</font>, "
-            "<font face='Courier'>frontend/</font>, "
-            "<font face='Courier'>social-post-image/</font>, "
-            "<font face='Courier'>usage.py</font>, "
-            "<font face='Courier'>social-post-image/image_usage.py</font>. "
-            "Measured logs: <font face='Courier'>logs/usage.jsonl</font>, "
-            "<font face='Courier'>social-post-image/logs/image_usage.jsonl</font>. "
-            "Prior docs: <font face='Courier'>reports/social_post_generation_report.pdf</font>, "
-            "<font face='Courier'>social-post-image/reports/AddLyft_Social_Post_Image_MVP_Audit.pdf</font>, "
-            "<font face='Courier'>reports/AddLyft_GCP_Vertex_AI_RnD_Technical_Reference.pdf</font> "
-            "(context only; video sections out of scope).",
-            styles["Body"],
+            "Useful if engineering wants exact names. Clients can skip this section.",
+            styles["Small"],
         )
     )
+    story.append(kv_table([
+        ["UI", "React (Vite) · port 5173 · proxies /api → 8000"],
+        ["API", "FastAPI · POST /api/generate · POST /api/generate-image"],
+        ["Text model ID", "gemini-2.5-flash-lite · Vertex · us-central1 (default)"],
+        [
+            "Image model ID",
+            "gemini-3.1-flash-lite-image · Vertex · global · 9:16 · 1K",
+        ],
+        [
+            "Logs used for Measured rows",
+            "logs/usage.jsonl · social-post-image/logs/image_usage.jsonl",
+        ],
+        [
+            "Related PDFs",
+            "social_post_generation_report.pdf · "
+            "AddLyft_Social_Post_Image_MVP_Audit.pdf (earlier image-only view)",
+        ],
+    ]))
 
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
     story.append(HRFlowable(width="100%", thickness=0.6, color=GRID, spaceAfter=6))
     story.append(
         Paragraph(
-            "AddLyft R&amp;D · Social Post Workflow Audit (Text + Image) · "
-            "23 Sep 2026 · Estimator costs ≠ final cloud invoice",
+            "AddLyft R&amp;D · Social Post Workflow · Client overview · 23 Sep 2026 · "
+            "Estimator costs ≠ final cloud invoice",
             styles["Small"],
         )
     )

@@ -71,6 +71,35 @@ def log_usage(record: dict) -> Path:
     return LOG_PATH
 
 
+REPORT_SOURCES = frozenset({"api_pipeline", "api_regenerate"})
+
+
+def read_generation_reports(limit: int = 20) -> list[dict]:
+    """Return newest-first pipeline/regenerate total records from usage.jsonl."""
+    if limit < 1:
+        return []
+    if not LOG_PATH.exists():
+        return []
+
+    matches: list[dict] = []
+    with LOG_PATH.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict):
+                continue
+            if record.get("source") in REPORT_SOURCES:
+                matches.append(record)
+
+    matches.reverse()
+    return matches[:limit]
+
+
 def format_usage(record: dict) -> str:
     return (
         f"tokens: prompt={record['prompt_tokens']}  "

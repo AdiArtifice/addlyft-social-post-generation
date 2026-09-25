@@ -10,6 +10,7 @@ from google.genai.types import HarmBlockThreshold, HarmCategory, SafetySetting
 from .schema import SocialPost
 
 MAX_BRIEF_CHARS = 2000
+MAX_OPTIMIZED_PROMPT_CHARS = 1200
 MAX_CAPTION_CHARS = 500
 MAX_OFFER_CHARS = 200
 MAX_CTA_CHARS = 120
@@ -86,6 +87,21 @@ def validate_brief(brief: str) -> str:
                 "Please revise the request."
             )
     return text
+
+
+def enforce_optimized_prompt(text: str) -> str:
+    """Normalize and cap the Flash-Lite image-brief rewrite."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        raise GuardrailError("Optimized prompt came back empty. Please try again.")
+    if len(cleaned) > MAX_OPTIMIZED_PROMPT_CHARS:
+        cleaned = cleaned[:MAX_OPTIMIZED_PROMPT_CHARS].rstrip()
+    for pat in _BLOCKED_PATTERNS:
+        if pat.search(cleaned):
+            raise GuardrailError(
+                "Optimized prompt looks unsafe for an ad demo. Please revise the brief."
+            )
+    return cleaned
 
 
 def raise_if_safety_blocked(response: Any) -> None:

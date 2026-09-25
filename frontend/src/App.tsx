@@ -1,14 +1,13 @@
 import { useState } from "react";
 import {
   DEFAULT_STORE_BRAND,
+  generatePipeline,
   generatePost,
-  generatePoster,
   type PosterResult,
   type SocialPost,
 } from "./api";
 import { BriefForm, type RefItem } from "./components/BriefForm";
 import { PostPreviewCard } from "./components/PostPreviewCard";
-import { PosterPreview } from "./components/PosterPreview";
 import { RegenerateButton } from "./components/RegenerateButton";
 
 const STORE_BRAND = DEFAULT_STORE_BRAND;
@@ -37,11 +36,15 @@ export function App() {
     if (!brief.trim() || busy) return;
     setLoading(variation ? "regenerate" : "generate");
     setTextError(null);
-    if (!variation) setImageError(null);
 
     if (variation) {
+      if (!poster?.image_base64) {
+        setTextError("Generate a poster first, then regenerate the caption.");
+        setLoading(null);
+        return;
+      }
       try {
-        const next = await generatePost(brief, true, STORE_BRAND);
+        const next = await generatePost(brief, true, STORE_BRAND, poster);
         setHistory((prev) => [next, ...prev].slice(0, 3));
         setSelectedIndex(0);
       } catch (err) {
@@ -52,36 +55,61 @@ export function App() {
       return;
     }
 
+    setImageError(null);
     const files = refs.map((r) => r.file);
     const roles = refs.map((r) => r.role);
 
-    const [textResult, imageResult] = await Promise.allSettled([
-      generatePost(brief, false, STORE_BRAND),
-      generatePoster(brief, files, roles, allowPeople, STORE_BRAND),
-    ]);
-
-    if (textResult.status === "fulfilled") {
-      setHistory((prev) => [textResult.value, ...prev].slice(0, 3));
-      setSelectedIndex(0);
-    } else {
-      setTextError(
-        textResult.reason instanceof Error
-          ? textResult.reason.message
-          : "Text generation failed.",
+    try {
+      const result = await generatePipeline(
+        brief,
+        files,
+        roles,
+        allowPeople,
+        STORE_BRAND,
       );
-    }
 
-    if (imageResult.status === "fulfilled") {
-      setPoster(imageResult.value);
-    } else {
-      setImageError(
-        imageResult.reason instanceof Error
-          ? imageResult.reason.message
-          : "Poster generation failed.",
-      );
-    }
+      if (result.image_base64 && result.mime_type) {
+        setPoster({
+          image_base64: result.image_base64,
+          mime_type: result.mime_type,
+          filename: result.filename || "poster.png",
+          api_calls: result.api_calls,
+          person_generation: result.person_generation ?? undefined,
+          store_brand: result.store_brand,
+        });
+      } else {
+        setImageError("Poster generation returned no image.");
+      }
 
-    setLoading(null);
+      if (
+        result.caption &&
+        result.offer &&
+        result.cta &&
+        result.hashtags &&
+        result.hashtags.length > 0
+      ) {
+        const next: SocialPost = {
+          caption: result.caption,
+          offer: result.offer,
+          cta: result.cta,
+          hashtags: result.hashtags,
+          store_brand: result.store_brand,
+        };
+        setHistory((prev) => [next, ...prev].slice(0, 3));
+        setSelectedIndex(0);
+      } else if (result.text_error) {
+        setTextError(result.text_error);
+      } else {
+        setTextError("Caption generation returned incomplete fields.");
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Generation failed.";
+      setImageError(message);
+      setTextError(message);
+    } finally {
+      setLoading(null);
+    }
   }
 
   return (
@@ -90,8 +118,10 @@ export function App() {
         <p className="eyebrow">AddLyft · Client showcase</p>
         <h1>Social post preview</h1>
         <p className="lede">
-          Turn a short ad brief into caption, offer, CTA, hashtags, and an
-          optional poster from up to 3 reference images — then review as a draft.
+          Enter an ad brief, optionally add up to 3 reference images, then
+          generate a poster and vision-grounded caption, offer, CTA, and
+          hashtags as one social post — review as a draft before anything goes
+          live.
         </p>
       </header>
 
@@ -128,12 +158,14 @@ export function App() {
           {textError ? <p className="error">{textError}</p> : null}
           <PostPreviewCard
             post={post}
+            poster={poster}
             storeBrand={STORE_BRAND}
             loading={loading === "generate" || loading === "regenerate"}
+            imageError={imageError}
           />
           <div className="preview-actions">
             <RegenerateButton
-              disabled={!brief.trim() || busy}
+              disabled={!brief.trim() || !poster || busy}
               loading={loading === "regenerate"}
               onRegenerate={() => void runGenerate(true)}
             />
@@ -151,12 +183,6 @@ export function App() {
               </div>
             ) : null}
           </div>
-
-          <PosterPreview
-            poster={poster}
-            loading={loading === "generate"}
-            error={imageError}
-          />
         </div>
       </section>
     </main>

@@ -204,7 +204,7 @@ export function BriefForm({
       </label>
 
       <button className="primary" type="submit" disabled={loading || !brief.trim()}>
-        {loading ? "Generating…" : "Generate post + poster"}
+        {loading ? "Generating…" : "Generate poster + caption"}
       </button>
     </form>
   );
